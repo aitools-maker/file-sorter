@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ファイル仕分け</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --txt:#e7ebf2; --sub:#9aa3b2; --accent:#4f8cff; --accent2:#2bd49a;
+    --warn:#ffb454; --danger:#ff6b6b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Segoe UI",sans-serif}
+  body{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+
+  header{display:flex;align-items:center;gap:14px;padding:10px 16px;
+    background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  header h1{font-size:15px;margin:0;font-weight:700}
+  header .root{font-size:11px;color:var(--sub)}
+  .stat{font-size:12px;color:var(--sub)}
+  .stat b{color:var(--accent2)}
+  .grow{flex:1}
+  header select,header input[type=search]{background:var(--panel2);color:var(--txt);
+    border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12px}
+  .btn{background:var(--panel2);color:var(--txt);border:1px solid var(--line);
+    border-radius:7px;padding:6px 11px;font-size:12px;cursor:pointer}
+  .btn:hover{border-color:var(--accent)}
+
+  main{flex:1;display:flex;min-height:0}
+  /* 左: キュー */
+  #queue{width:300px;min-width:240px;background:var(--panel);border-right:1px solid var(--line);
+    overflow:auto}
+  .qitem{padding:8px 12px;border-bottom:1px solid var(--line);cursor:pointer;font-size:12px}
+  .qitem:hover{background:var(--panel2)}
+  .qitem.active{background:#243049;border-left:3px solid var(--accent)}
+  .qitem.done{opacity:.4}
+  .qitem .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .qitem .pp{color:var(--sub);font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .qitem .badge{display:inline-block;font-size:9.5px;padding:1px 5px;border-radius:5px;
+    background:#3a2a16;color:var(--warn);margin-right:4px}
+
+  /* 中央: プレビュー */
+  #center{flex:1;display:flex;flex-direction:column;min-width:0}
+  #preview{flex:1;display:flex;align-items:center;justify-content:center;
+    background:#0b0d12;overflow:auto;padding:14px;position:relative}
+  #preview img,#preview video{max-width:100%;max-height:100%;border-radius:8px;
+    box-shadow:0 6px 30px rgba(0,0,0,.5)}
+  #preview embed,#preview iframe{width:100%;height:100%;border:0;background:#fff;border-radius:8px}
+  #preview pre{align-self:stretch;width:100%;height:100%;margin:0;overflow:auto;
+    background:var(--panel);padding:16px;border-radius:8px;font-size:12.5px;
+    white-space:pre-wrap;word-break:break-word;color:#cdd5e2}
+  .noprev{text-align:center;color:var(--sub)}
+  .noprev .big{font-size:54px;margin-bottom:8px}
+
+  .meta{padding:9px 16px;background:var(--panel);border-top:1px solid var(--line);
+    border-bottom:1px solid var(--line);font-size:12px}
+  .meta .nm{font-weight:700;font-size:14px;word-break:break-all}
+  .meta .row{color:var(--sub);margin-top:3px}
+  .meta code{background:var(--panel2);padding:1px 6px;border-radius:5px}
+
+  /* 候補 */
+  #actions{background:var(--panel);padding:12px 16px;max-height:42vh;overflow:auto}
+  .seclabel{font-size:11px;color:var(--sub);margin:0 0 8px}
+  .cands{display:flex;flex-wrap:wrap;gap:8px}
+  .cand{display:flex;flex-direction:column;align-items:flex-start;gap:2px;
+    background:var(--panel2);border:1px solid var(--line);border-radius:9px;
+    padding:8px 12px;cursor:pointer;min-width:140px;text-align:left}
+  .cand:hover{border-color:var(--accent);background:#1c2740}
+  .cand .k{font-size:10px;color:var(--accent);font-weight:700}
+  .cand .d{font-size:12.5px;font-weight:600}
+  .cand .w{font-size:10px;color:var(--sub)}
+  .cand.top1{border-color:var(--accent2)}
+  .cand.top1 .k{color:var(--accent2)}
+
+  .extra{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center}
+  .extra .btn.keep{border-color:#3a5}
+  .extra .btn.skip{}
+  .btn.trash{border-color:var(--danger);color:var(--danger)}
+  .btn.trash:hover{background:#3a1a1a;border-color:var(--danger)}
+  .extra .btn.undo{border-color:#a55}
+  .extra input.path{flex:1;min-width:200px;background:var(--panel2);color:var(--txt);
+    border:1px solid var(--line);border-radius:7px;padding:7px 10px;font-size:12px}
+  .hint{font-size:11px;color:var(--sub);margin-top:8px}
+  kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2px;
+    border-radius:5px;padding:0 6px;font-size:11px}
+
+  #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);
+    background:#243049;border:1px solid var(--accent);color:var(--txt);
+    padding:10px 16px;border-radius:9px;font-size:13px;opacity:0;transition:.2s;
+    pointer-events:none;z-index:50}
+  #toast.show{opacity:1}
+  datalist{color:#000}
+</style>
+</head>
+<body>
+<header>
+  <h1>🗂 ファイル仕分け</h1>
+  <span class="root" id="rootlabel"></span>
+  <span class="grow"></span>
+  <span class="stat">残り <b id="st-remain">–</b> / 全 <span id="st-total">–</span>（済 <span id="st-done">–</span>）</span>
+  <select id="f-top"><option value="">全フォルダ</option></select>
+  <select id="f-kind">
+    <option value="">ファイル＋フォルダ</option>
+    <option value="file">ファイルのみ</option>
+    <option value="dir">フォルダのみ</option>
+  </select>
+  <select id="f-sort">
+    <option value="suspect">怪しい順</option>
+    <option value="name">名前順</option>
+    <option value="size">サイズ順</option>
+    <option value="mtime">更新日順</option>
+    <option value="path">パス順</option>
+  </select>
+  <input type="search" id="f-q" placeholder="ファイル名で絞り込み">
+  <label class="stat"><input type="checkbox" id="f-hide" checked> 済を隠す</label>
+  <button class="btn" id="emptyBtn" style="border-color:var(--danger);color:var(--danger)">🧹 空フォルダ削除</button>
+  <button class="btn" id="reloadBtn">再スキャン</button>
+</header>
+
+<main>
+  <div id="queue"></div>
+  <div id="center">
+    <div id="preview"><div class="noprev"><div class="big">🗂</div>右で再スキャンするとファイルが並びます</div></div>
+    <div class="meta" id="meta"></div>
+    <div id="actions">
+      <p class="seclabel">移動先の候補（クリックで移動）</p>
+      <div class="cands" id="cands"></div>
+      <div class="extra">
+        <button class="btn" id="deepBtn" style="border-color:var(--warn);color:var(--warn)">🔬 さらに詳しく仕分け</button>
+        <button class="btn keep" id="keepBtn">✓ ここで良い（確認済み）</button>
+        <button class="btn skip" id="skipBtn">→ スキップ</button>
+        <button class="btn" id="renameBtn">✏️ 名前変更</button>
+        <input class="path" id="customPath" list="dirlist" placeholder="その他の移動先を入力（例: Media/Photos/旅行）">
+        <datalist id="dirlist"></datalist>
+        <button class="btn" id="customGo">この場所へ移動</button>
+        <button class="btn trash" id="trashBtn">🗑 ゴミ箱へ</button>
+        <button class="btn undo" id="undoBtn">↶ 元に戻す</button>
+      </div>
+      <div class="hint">
+        キー操作: <kbd>1</kbd>〜<kbd>9</kbd> 候補へ移動 ／ <kbd>K</kbd> ここで良い ／ <kbd>S</kbd> スキップ ／ <kbd>D</kbd> ゴミ箱 ／ <kbd>U</kbd> 戻す ／ <kbd>↑</kbd><kbd>↓</kbd> 選択移動
+      </div>
+    </div>
+  </div>
+</main>
+<div id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+let DATA = {items:[], dirs:[], mains:[], root:""};
+let view = [];           // フィルタ後の表示リスト
+let cur = null;          // 現在選択中 item
+
+function fmtSize(n){
+  if(n<1024) return n+" B";
+  const u=["KB","MB","GB","TB"]; let i=-1;
+  do{ n/=1024; i++; }while(n>=1024 && i<u.length-1);
+  return n.toFixed(1)+" "+u[i];
+}
+function fmtDate(t){ if(!t) return ""; const d=new Date(t*1000);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
+
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),1800);}
+
+async function scan(){
+  // file:// で開かれていると fetch("/api/scan") が必ず失敗して永久に止まる。先に弾く。
+  if(location.protocol==="file:"){
+    $("#preview").innerHTML='<div class="noprev"><div class="big">🚫</div>'+
+      'このページは <code>file://</code> で開かれています。<br>'+
+      'アドレスバーに <b>http://localhost:8765</b> と入力して開き直してください。<br>'+
+      '<span style="font-size:11px">（<code>start.command</code> をダブルクリックすると自動で正しく開きます）</span><br><br>'+
+      '<a class="btn" href="http://localhost:8765" style="text-decoration:none">localhost:8765 を開く</a></div>';
+    return;
+  }
+  $("#preview").innerHTML='<div class="noprev"><div class="big">⏳</div>スキャン中…</div>';
+  let r, DATAx;
+  try{
+    r = await fetch("/api/scan");
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    DATAx = await r.json();
+  }catch(e){
+    $("#preview").innerHTML='<div class="noprev"><div class="big">⚠️</div>'+
+      'スキャンに失敗しました。<br><span style="font-size:12px">'+esc(String(e&&e.message||e))+'</span><br><br>'+
+      'サーバーが起動しているか確認してください<br>'+
+      '（<code>start.command</code> をダブルクリック → <b>http://localhost:8765</b>）<br><br>'+
+      '<button class="btn" onclick="scan()">再試行</button></div>';
+    return;
+  }
+  DATA = DATAx;
+  $("#rootlabel").textContent = DATA.root;
+  // top フィルタ
+  const sel=$("#f-top"); sel.innerHTML='<option value="">全フォルダ</option>';
+  (DATA.tops||DATA.mains).forEach(m=>{
+    const o=document.createElement("option");o.value=m;o.textContent=m;sel.appendChild(o);});
+  // datalist
+  const dl=$("#dirlist"); dl.innerHTML="";
+  DATA.dirs.forEach(d=>{const o=document.createElement("option");o.value=d;dl.appendChild(o);});
+  applyFilter();
+  updateStats();
+}
+
+function updateStats(){
+  const total=DATA.items.length;
+  const done=DATA.items.filter(i=>i.reviewed).length;
+  $("#st-total").textContent=total;
+  $("#st-done").textContent=done;
+  $("#st-remain").textContent=total-done;
+}
+
+function applyFilter(keepCur){
+  if(browse) return;   // フォルダ閲覧中はメインキューのフィルタを適用しない
+  const top=$("#f-top").value, q=$("#f-q").value.trim().toLowerCase();
+  const hide=$("#f-hide").checked, sort=$("#f-sort").value, kind=$("#f-kind").value;
+  view = DATA.items.filter(i=>{
+    if(hide && i.reviewed) return false;
+    if(top && i.top!==top) return false;
+    if(kind==="file" && i.is_dir) return false;
+    if(kind==="dir" && !i.is_dir) return false;
+    if(q && !(i.name.toLowerCase().includes(q)||i.rel.toLowerCase().includes(q))) return false;
+    return true;
+  });
+  const cmp={
+    suspect:(a,b)=>(b.suspect-a.suspect)||a.rel.localeCompare(b.rel),
+    name:(a,b)=>a.name.localeCompare(b.name),
+    size:(a,b)=>b.size-a.size,
+    mtime:(a,b)=>b.mtime-a.mtime,
+    path:(a,b)=>a.rel.localeCompare(b.rel),
+  }[sort];
+  view.sort(cmp);
+  renderQueue();
+  if(!keepCur){
+    if(view.length){ select(view[0],{noEnter:true}); } else { showEmpty(); }
+  }
+}
+
+function showEmpty(){
+  cur=null;
+  $("#preview").innerHTML='<div class="noprev"><div class="big">🎉</div>表示するファイルがありません</div>';
+  $("#meta").innerHTML=""; $("#cands").innerHTML="";
+}
+
+function renderQueue(){
+  if(browse){ renderBrowseQueue(); return; }
+  const Q=$("#queue"); Q.innerHTML="";
+  view.slice(0,800).forEach(it=>{
+    const d=document.createElement("div");
+    d.className="qitem"+(cur&&it.rel===cur.rel?" active":"")+(it.reviewed?" done":"");
+    const badge = it.suspect>=3 ? '<span class="badge">要確認</span>' : '';
+    const dirmark = it.is_dir ? '📁 ' : '';
+    d.innerHTML=`<div class="nm">${badge}${dirmark}${esc(it.name)}</div><div class="pp">${esc(it.parent||"（直下）")}</div>`;
+    d.onclick=()=>select(it);
+    d.dataset.rel=it.rel;
+    Q.appendChild(d);
+  });
+  if(view.length>800){
+    const m=document.createElement("div");m.className="qitem";m.style.color="var(--sub)";
+    m.textContent=`… 他 ${view.length-800} 件（絞り込んでください）`;Q.appendChild(m);
+  }
+}
+
+function esc(s){return (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+
+const BUNDLE_EXTS=[".key",".pages",".numbers",".logicx",".band",".app",".rtfd",".photoslibrary",".fcpbundle"];
+function select(it, opts){
+  // 一覧のフォルダはクリックでは「選択するだけ」。中を開くのはプレビューの「📂 中を開いて1つずつ仕分け」から。
+  cur=it;
+  document.querySelectorAll(".qitem").forEach(e=>e.classList.toggle("active", e.dataset.rel===it.rel));
+  const a=document.querySelector(`.qitem[data-rel="${cssEsc(it.rel)}"]`);
+  if(a) a.scrollIntoView({block:"nearest"});
+  renderPreview(it);
+  renderMeta(it);
+  renderCands(it);
+}
+function cssEsc(s){ return (window.CSS&&CSS.escape)?CSS.escape(s):s.replace(/"/g,'\\"'); }
+
+// ── 拡張子→種別（フォルダ内ファイルは kind を持たないので自前判定）──
+const EXT_KIND={
+  image:["jpg","jpeg","png","heic","heif","gif","webp","tiff","tif","bmp","svg"],
+  video:["mp4","mov","m4v","avi","mkv","wmv","webm"],
+  audio:["wav","aif","aiff","mp3","m4a","flac","ogg","aac"],
+  pdf:["pdf"], text:["txt","md","markdown","log"],
+};
+function kindOf(ext){ ext=(ext||"").replace(/^\./,"").toLowerCase();
+  for(const k in EXT_KIND){ if(EXT_KIND[k].includes(ext)) return k; } return "other"; }
+
+let browse=null;   // フォルダ閲覧状態 {dir: rel, file: entry|null}
+
+function renderPreview(it){
+  if([".key",".pages",".numbers"].includes(it.ext)){ fillFilePreview($("#preview"), it); return; }
+  if(it.is_dir && !it._browse){ renderFolderSummary(it); return; }
+  fillFilePreview($("#preview"), it);
+}
+
+function renderFolderSummary(it){
+  const P=$("#preview");
+  P.innerHTML='<div class="noprev" style="margin:auto">⏳ 中身を確認中…</div>';
+  fetch("/api/list?rel="+encodeURIComponent(it.rel)).then(r=>r.json()).then(j=>{
+    const total=j.total||0;
+    const isBundle=/\.(logicx|band|app|rtfd|photoslibrary|fcpbundle)$/i.test(it.name);
+    P.innerHTML='<div class="noprev" style="margin:auto">'+
+      '<div class="big">'+(isBundle?'📦':'📁')+'</div>'+esc(it.name)+'<br>'+
+      '中に <b style="color:var(--warn)">'+total+(j.capped?'+':'')+'</b> 個のファイル<br><br>'+
+      (total>0
+        ?'<button class="btn" id="openDirBtn" style="font-size:13px;padding:8px 14px">📂 中を開いて1つずつ仕分け</button>'+
+         '<br><br><button class="btn" id="flatDirBtn" style="font-size:13px;padding:8px 14px">🔬 さらに詳しく仕分け（配下の全ファイルを1つずつ）</button>'
+        :'<span style="color:var(--accent2)">（空のフォルダ）</span>')+
+      '<div style="font-size:11px;color:var(--sub);margin-top:10px">※ 下のボタンはこのフォルダ自体の移動・削除</div></div>';
+    const b=$("#openDirBtn"); if(b) b.onclick=()=>enterBrowse(it);
+    const fb=$("#flatDirBtn"); if(fb) fb.onclick=()=>{ enterBrowse(it); browse.flat=true; browse.curIdx=null; renderBrowseQueue(); };
+  }).catch(()=>{ P.innerHTML='<div class="noprev" style="margin:auto">中身の取得に失敗しました</div>'; });
+}
+
+function enterBrowse(block){
+  browse={dir:block.rel, block:block, files:[], curIdx:null, flat:false, flatTypes:"common", flatAge:0};
+  cur=block;
+  renderBrowseQueue();
+  renderMeta(block); renderCands(block);   // 下部はフォルダ自体の移動候補
+  $("#preview").innerHTML='<div class="noprev" style="margin:auto"><div class="big">📂</div>'+esc(block.name)+
+    '<br><span style="font-size:12px">左の一覧からファイルをクリックするとプレビュー＆操作できます</span><br><br>'+
+    '<button class="btn" id="flatBtn" style="font-size:13px;padding:8px 14px">🔬 さらに詳しく仕分け（配下の全ファイルを1つずつ）</button></div>';
+  const fb=$("#flatBtn"); if(fb) fb.onclick=()=>{ browse.flat=true; browse.curIdx=null; renderBrowseQueue(); };
+}
+
+// 単一ファイルを container にプレビュー描画（rel/ext を持つ任意のオブジェクトを受ける）
+function fillFilePreview(C, item){
+  if(C._zoomCleanup){ C._zoomCleanup(); C._zoomCleanup=null; }
+  C.innerHTML="";
+  const ext=(item.ext||"").toLowerCase();
+  const kind=item.kind||kindOf(ext);
+  const url="/api/raw?rel="+encodeURIComponent(item.rel);
+  const center=h=>C.innerHTML='<div class="noprev" style="margin:auto">'+h+'</div>';
+  if([".key",".pages",".numbers"].includes(ext)){
+    center("⏳ プレビュー読み込み中…");
+    const img=new Image(); img.style.cssText="display:block;margin:auto";
+    img.onload=()=>{ C.innerHTML=""; C.appendChild(img); makeZoomable(C,img); };
+    img.onerror=()=>{ const label={".key":"Keynote",".pages":"Pages",".numbers":"Numbers"}[ext]||ext;
+      center('<div class="big">📽</div>'+label+'<br><span style="font-size:11px">プレビュー画像が埋め込まれていません</span>'); };
+    img.src="/api/iwork-preview?rel="+encodeURIComponent(item.rel);
+    return;
+  }
+  if(kind==="image"){ const i=new Image(); i.src=url; i.style.cssText="display:block;margin:auto"; C.appendChild(i); makeZoomable(C,i); return; }
+  if(kind==="video"){ const v=document.createElement("video"); v.src=url; v.controls=true;
+    v.preload="metadata"; v.style.margin="auto"; C.appendChild(v); return; }
+  if(kind==="audio"){ const w=document.createElement("div"); w.className="noprev"; w.style.margin="auto";
+    w.innerHTML='<div class="big">🎵</div>'; const a=document.createElement("audio");
+    a.src=url; a.controls=true; w.appendChild(a); C.appendChild(w); return; }
+  if(kind==="pdf"){ const e=document.createElement("iframe"); e.src=url; C.appendChild(e); return; }
+  if(kind==="text"||[".docx",".pptx",".xlsx",".csv",".tsv"].includes(ext)){
+      center("⏳ 読み込み中…");
+      fetch("/api/text?rel="+encodeURIComponent(item.rel)).then(r=>r.json())
+      .then(j=>{C.innerHTML="";const pre=document.createElement("pre");pre.textContent=j.text||"(空)";C.appendChild(pre);makeTextZoom(C,pre);})
+      .catch(e=>{center("プレビュー取得失敗: "+esc(String(e)));}); return; }
+  const icon={doc:"📝",sheet:"📊",slide:"📽",dtm:"🎚",other:"📄"}[kind]||"📄";
+  center('<div class="big">'+icon+'</div>'+esc(ext||"")+(item.size!=null?' ・ '+fmtSize(item.size):'')+
+    '<br><span style="font-size:11px">この形式はプレビュー非対応</span>');
+}
+
+// 画像をズーム（ホイール/ボタン）＋ドラッグでパン。ダブルクリックでリセット。
+function makeZoomable(C, el){
+  let scale=1, tx=0, ty=0, drag=null;
+  el.style.transformOrigin="center center";
+  el.style.transition="transform .05s linear";
+  el.style.cursor="grab";
+  const clamp=()=>{ scale=Math.min(8,Math.max(0.2,scale)); };
+  const apply=()=>{ el.style.transform="translate("+tx+"px,"+ty+"px) scale("+scale+")"; };
+  const zoom=f=>{ scale*=f; clamp(); apply(); };
+  const reset=()=>{ scale=1; tx=0; ty=0; apply(); };
+  const onWheel=ev=>{ ev.preventDefault(); zoom(ev.deltaY<0?1.12:1/1.12); };
+  C.addEventListener("wheel",onWheel,{passive:false});
+  C._zoomCleanup=()=>C.removeEventListener("wheel",onWheel);
+  el.addEventListener("pointerdown",ev=>{ drag={x:ev.clientX-tx,y:ev.clientY-ty}; try{el.setPointerCapture(ev.pointerId);}catch(_){} el.style.cursor="grabbing"; });
+  el.addEventListener("pointermove",ev=>{ if(!drag)return; tx=ev.clientX-drag.x; ty=ev.clientY-drag.y; apply(); });
+  el.addEventListener("pointerup",()=>{ drag=null; el.style.cursor="grab"; });
+  el.addEventListener("dblclick",reset);
+  C.appendChild(makeZoomBar(()=>zoom(1/1.25), reset, ()=>zoom(1.25)));
+}
+
+// テキスト/表の文字サイズ拡大縮小（ボタン / Ctrl+ホイール）
+function makeTextZoom(C, pre){
+  let fs=12.5; pre.style.fontSize=fs+"px";
+  const set=v=>{ fs=Math.min(40,Math.max(8,v)); pre.style.fontSize=fs+"px"; };
+  const onWheel=ev=>{ if(!ev.ctrlKey&&!ev.metaKey) return; ev.preventDefault(); set(fs+(ev.deltaY<0?1.5:-1.5)); };
+  C.addEventListener("wheel",onWheel,{passive:false});
+  C._zoomCleanup=()=>C.removeEventListener("wheel",onWheel);
+  C.appendChild(makeZoomBar(()=>set(fs-1.5), ()=>set(12.5), ()=>set(fs+1.5),"A－","A","A＋"));
+}
+
+function makeZoomBar(onMinus,onReset,onPlus,lm,lr,lp){
+  const tb=document.createElement("div");
+  tb.style.cssText="position:absolute;right:10px;bottom:10px;display:flex;gap:4px;z-index:10";
+  const mk=(t,fn)=>{ const b=document.createElement("button"); b.className="btn"; b.textContent=t;
+    b.style.padding="4px 9px"; b.onclick=fn; return b; };
+  tb.appendChild(mk(lm||"－",onMinus));
+  tb.appendChild(mk(lr||"100%",onReset));
+  tb.appendChild(mk(lp||"＋",onPlus));
+  return tb;
+}
+
+// ── フォルダ閲覧：中身を左のキューに表示し、ファイルは中央でフルプレビュー ──
+// autoSelectIdx を渡すと、読み込み後にその位置のファイルを自動選択（操作後に次へ自動で進む）
+function renderBrowseQueue(autoSelectIdx){
+  const Q=$("#queue"); Q.innerHTML="";
+  const back=document.createElement("div"); back.className="qitem";
+  back.style.cssText="background:var(--panel2);font-weight:700;color:var(--accent)";
+  back.textContent="← 仕分け一覧へ戻る"; back.onclick=exitBrowse; Q.appendChild(back);
+  // 「さらに詳しく仕分け」トグル：配下の全ファイルを階層無視で1つずつ
+  const toggle=document.createElement("div"); toggle.className="qitem";
+  toggle.style.cssText="font-weight:600;color:"+(browse.flat?"var(--accent2)":"var(--warn)");
+  toggle.textContent=browse.flat?"📁 フォルダ表示に戻す":"🔬 さらに詳しく仕分け（配下の全ファイルを1つずつ）";
+  toggle.onclick=()=>{ browse.flat=!browse.flat; browse.curIdx=null; browse.dir=browse.block.rel; renderBrowseQueue(); };
+  Q.appendChild(toggle);
+  if(!browse.flat){
+    // パンくず（通常のフォルダ表示）
+    const crumb=document.createElement("div");
+    crumb.style.cssText="padding:7px 12px;font-size:11px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:4px;align-items:center";
+    const segs=browse.dir.split("/"); let acc="";
+    segs.forEach((s,idx)=>{ acc=idx===0?s:acc+"/"+s; const target=acc;
+      const a=document.createElement("span"); a.textContent=s;
+      a.style.cssText="color:var(--accent);cursor:pointer;text-decoration:underline";
+      a.onclick=()=>{ browse.dir=target; browse.curIdx=null; renderBrowseQueue(); }; crumb.appendChild(a);
+      if(idx<segs.length-1){ const sep=document.createElement("span"); sep.textContent="›"; sep.style.color="var(--sub)"; crumb.appendChild(sep); }
+    });
+    Q.appendChild(crumb);
+  } else {
+    const note=document.createElement("div");
+    note.style.cssText="padding:7px 12px;font-size:11px;border-bottom:1px solid var(--line);color:var(--sub);display:flex;flex-direction:column;gap:6px";
+    note.innerHTML='🔬 <b>'+esc(browse.block.name)+'</b> 配下の全ファイル';
+    const ctrl=document.createElement("div"); ctrl.style.cssText="display:flex;gap:6px;flex-wrap:wrap";
+    const selStyle="background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:11px;flex:1;min-width:120px";
+    const selT=document.createElement("select"); selT.style.cssText=selStyle;
+    selT.innerHTML='<option value="common">よく使うファイルのみ</option><option value="all">すべての種類</option>';
+    selT.value=browse.flatTypes||"common";
+    selT.onchange=()=>{ browse.flatTypes=selT.value; browse.curIdx=null; renderBrowseQueue(); };
+    const selA=document.createElement("select"); selA.style.cssText=selStyle;
+    selA.innerHTML='<option value="0">最終利用：すべて</option><option value="365">1年以上前</option><option value="730">2年以上前</option><option value="1095">3年以上前</option>';
+    selA.value=String(browse.flatAge||0);
+    selA.onchange=()=>{ browse.flatAge=+selA.value; browse.curIdx=null; renderBrowseQueue(); };
+    ctrl.appendChild(selT); ctrl.appendChild(selA);
+    note.appendChild(ctrl);
+    Q.appendChild(note);
+  }
+  const body=document.createElement("div");
+  body.innerHTML='<div class="qitem" style="color:var(--sub)">⏳ 読み込み中…</div>';
+  Q.appendChild(body);
+  const url = browse.flat
+    ? "/api/listall?rel="+encodeURIComponent(browse.block.rel)+"&types="+(browse.flatTypes||"common")+"&age="+(browse.flatAge||0)
+    : "/api/list?rel="+encodeURIComponent(browse.dir);
+  fetch(url).then(r=>r.json()).then(j=>{
+    body.innerHTML="";
+    const entries = browse.flat ? (j.files||[]) : (j.entries||[]);
+    const head=document.createElement("div");
+    head.style.cssText="padding:6px 12px;font-size:11px;color:var(--sub)";
+    head.innerHTML=browse.flat
+      ? 'ファイル <b style="color:var(--warn)">'+(j.total||0)+(j.capped?'+':'')+'</b> 件 ・ 1つずつ仕分け'
+      : '中に <b style="color:var(--warn)">'+(j.total||0)+(j.capped?'+':'')+'</b> 個 ・ クリックで開く';
+    body.appendChild(head);
+    if(j.error){ body.insertAdjacentHTML("beforeend",'<div class="qitem">取得失敗: '+esc(j.error)+'</div>'); browse.files=[]; return; }
+    if(!entries.length){
+      body.insertAdjacentHTML("beforeend",'<div class="qitem" style="color:var(--accent2)">'+(browse.flat?'（ファイルなし）':'（空のフォルダ）')+'</div>');
+      browse.files=[];
+      if(typeof autoSelectIdx==="number") innerDone();
+      return;
+    }
+    const fileRows=[];
+    entries.forEach(e=>{
+      const isdir = !browse.flat && e.is_dir;
+      const flatDir = browse.flat && e.is_dir;
+      const d=document.createElement("div"); d.className="qitem";
+      const ic=(isdir||flatDir)?'📁':'📄';
+      const rt=isdir?(e.filecount+(e.capped?'+':'')+'件'):(flatDir?'空フォルダ':fmtSize(e.size));
+      const ppLine=browse.flat
+        ? esc(e.sub||"（直下）")+' ・ '+rt+(e.last?' ・ '+fmtDate(e.last):'')
+        : rt;
+      d.innerHTML='<div class="nm">'+ic+' '+esc(e.name)+(isdir?' <span style="color:var(--sub)">›</span>':'')+'</div>'+
+        '<div class="pp">'+ppLine+'</div>';
+      if(isdir){ d.onclick=()=>{ browse.dir=e.rel; browse.curIdx=null; renderBrowseQueue(); }; }
+      else { const fi=fileRows.length; d.onclick=()=>selectInner(e,d,fi); fileRows.push({e:e,el:d}); }
+      if(cur&&cur.rel===e.rel) d.classList.add("active");
+      body.appendChild(d);
+    });
+    browse.files=fileRows.map(f=>f.e);
+    if(j.capped) body.insertAdjacentHTML("beforeend",'<div class="qitem" style="color:var(--sub);font-size:11px">… 多すぎるため一部のみ表示</div>');
+    else if(j.more) body.insertAdjacentHTML("beforeend",'<div class="qitem" style="color:var(--sub);font-size:11px">… 先頭 400 件まで</div>');
+    if(typeof autoSelectIdx==="number"){
+      if(fileRows.length){
+        const i=Math.min(autoSelectIdx, fileRows.length-1);
+        selectInner(fileRows[i].e, fileRows[i].el, i);
+        fileRows[i].el.scrollIntoView({block:"nearest"});
+      } else innerDone();
+    }
+  }).catch(()=>{ body.innerHTML='<div class="qitem">中身の取得に失敗しました</div>'; });
+}
+
+function innerDone(){   // フォルダ内のファイルを処理し尽くした
+  cur=browse.block;
+  renderMeta(browse.block); $("#cands").innerHTML="";
+  $("#preview").innerHTML='<div class="noprev" style="margin:auto"><div class="big">🎉</div>'+
+    'このフォルダのファイルは片付きました<br><span style="font-size:12px">「← 仕分け一覧へ戻る」で戻れます</span></div>';
+}
+
+// 中のファイルを選択 → 中央フルプレビュー＋下部 #actions に候補・操作（cur 経由で既存処理を再利用）
+function selectInner(e, el, idx){
+  e._browse=true; e._dir=browse.dir; e.kind=kindOf(e.ext);
+  e.parent=e.rel.split("/").slice(0,-1).join("/");   // 実際の親フォルダ（平坦表示でも正しく）
+  if(e.reviewed===undefined) e.reviewed=false;
+  if(!e.candidates) e.candidates=[];
+  if(typeof idx==="number") browse.curIdx=idx;
+  cur=e;
+  document.querySelectorAll("#queue .qitem").forEach(x=>x.classList.remove("active"));
+  if(el) el.classList.add("active");
+  fillFilePreview($("#preview"), e);
+  renderMeta(e);
+  $("#cands").innerHTML='<span class="hint">候補を取得中…</span>';
+  fetch("/api/candidates?rel="+encodeURIComponent(e.rel)).then(r=>r.json()).then(j=>{
+    e.candidates=j.candidates||[]; if(cur===e) renderCands(e);
+  }).catch(()=>{ if(cur===e) $("#cands").innerHTML='<span class="hint">候補の取得に失敗しました</span>'; });
+}
+
+function exitBrowse(){
+  const b=browse&&browse.block; browse=null;
+  renderQueue();
+  if(b){ const found=DATA.items.find(x=>x.rel===b.rel)||b; select(found,{noEnter:true}); }
+}
+
+function renderMeta(it){
+  const sizeLabel = it.is_dir
+    ? `📁 フォルダ・${it.filecount>500?'500+':it.filecount} 件のファイル`
+    : fmtSize(it.size);
+  $("#meta").innerHTML=
+    `<div class="nm">${esc(it.name)}</div>
+     <div class="row">現在地: <code>${esc(it.parent||"（直下）")}</code></div>
+     <div class="row">${sizeLabel} ・ 更新 ${fmtDate(it.mtime)} ・ ${esc(it.ext||"")}${it.reviewed?' ・ <span style="color:var(--accent2)">確認済み</span>':''}</div>`;
+}
+
+function renderCands(it){
+  const C=$("#cands"); C.innerHTML="";
+  (it.candidates||[]).forEach((c,idx)=>{
+    const b=document.createElement("div");
+    b.className="cand"+(idx===0?" top1":"");
+    b.innerHTML=`<span class="k">${idx+1}</span><span class="d">${esc(c.dir)}</span>${c.why?`<span class="w">${esc(c.why)}</span>`:""}`;
+    b.onclick=()=>move(it,c.dir);
+    C.appendChild(b);
+  });
+  if(!it.candidates||!it.candidates.length){
+    C.innerHTML='<span class="hint">候補なし。下の入力欄で移動先を指定してください。</span>';
+  }
+}
+
+async function move(it,dir){
+  const r=await fetch("/api/move",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({from:it.rel,dir})});
+  const j=await r.json();
+  if(!j.ok){ toast("⚠ "+j.error); return; }
+  it.reviewed=true; it.rel=j.to; it.parent=dir;
+  toast("→ "+dir+" へ移動");
+  advance(it);
+}
+
+async function keep(it){
+  if(it._browse){ toast("フォルダ内のファイルに「確認済み」は使いません"); return; }
+  const r=await fetch("/api/review",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({rel:it.rel})});
+  await r.json(); it.reviewed=true; toast("✓ 確認済みにしました"); advance(it);
+}
+
+async function rename(it){
+  const nn = prompt("新しいファイル名（拡張子を省くと元のまま維持）", it.name);
+  if(nn===null) return;                 // キャンセル
+  const name = nn.trim();
+  if(!name || name===it.name) return;
+  const r = await fetch("/api/rename",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({from:it.rel, name})});
+  const j = await r.json();
+  if(!j.ok){ toast("⚠ "+j.error); return; }
+  it.rel = j.to;
+  it.name = j.to.split("/").pop();
+  it.ext = (it.name.match(/\.[^.]+$/)||[""])[0].toLowerCase();
+  toast("✏️ 名前を変更: "+it.name);
+  renderQueue(); renderMeta(it); renderPreview(it);
+}
+
+async function trash(it){
+  const r=await fetch("/api/trash",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({from:it.rel})});
+  const j=await r.json();
+  if(!j.ok){ toast("⚠ "+j.error); return; }
+  it.reviewed=true;
+  toast("🗑 ゴミ箱へ移動（U で戻せます）");
+  advance(it);
+}
+
+async function undo(){
+  const r=await fetch("/api/undo",{method:"POST"}); const j=await r.json();
+  if(!j.undone){ toast("戻す操作はありません"); return; }
+  toast("↶ 取り消しました");
+  if(browse){ renderBrowseQueue(); renderMeta(browse.block); }   // ブラウズ中は中身一覧だけ更新
+  else await scan();
+}
+
+function advance(doneItem){
+  // フォルダ内ファイルを処理した直後：左の中身一覧を更新し、操作対象を塊に戻す
+  if(browse && doneItem && doneItem._browse){
+    if(browse.block && typeof browse.block.filecount==="number") browse.block.filecount=Math.max(0,browse.block.filecount-1);
+    updateStats();
+    renderBrowseQueue(browse.curIdx!=null?browse.curIdx:0);   // 同じ位置＝次のファイルを自動選択
+    return;
+  }
+  if(browse && doneItem && !doneItem._browse){ browse=null; }   // 塊ごと処理したらブラウズ終了
+  updateStats();
+  const idx=view.indexOf(doneItem);
+  applyFilter(true);                 // キュー再構築（cur 保持）
+  // 次の未処理へ
+  let next=null;
+  if($("#f-hide").checked){
+    next = view[Math.min(idx, view.length-1)] || view[0];
+  }else{
+    next = view[idx+1] || view[idx] || view[0];
+  }
+  if(next) select(next,{noEnter:true}); else showEmpty();
+}
+
+function customMove(){
+  if(!cur) return;
+  const dir=$("#customPath").value.trim().replace(/\/+$/,"");
+  if(!dir){ toast("移動先を入力してください"); return; }
+  move(cur,dir); $("#customPath").value="";
+}
+
+// ── イベント ──
+$("#reloadBtn").onclick=()=>{ browse=null; scan(); };
+$("#emptyBtn").onclick=async()=>{
+  const empties=(DATA.items||[]).filter(i=>i.empty);
+  if(!empties.length){ toast("空フォルダはありません"); return; }
+  if(!confirm(empties.length+" 個の空フォルダをゴミ箱へ移動します。よろしいですか？\n（U または Finder のゴミ箱で戻せます）")) return;
+  try{
+    const r=await fetch("/api/trash-empty",{method:"POST"});
+    const j=await r.json();
+    toast("🧹 "+(j.count||0)+" 個の空フォルダをゴミ箱へ移動しました");
+  }catch(e){ toast("⚠ 失敗: "+esc(String(e))); }
+  browse=null; await scan();
+};
+$("#f-top").onchange=()=>applyFilter();
+$("#f-kind").onchange=()=>applyFilter();
+$("#f-sort").onchange=()=>applyFilter();
+$("#f-q").oninput=()=>applyFilter();
+$("#f-hide").onchange=()=>applyFilter();
+$("#keepBtn").onclick=()=>cur&&keep(cur);
+$("#skipBtn").onclick=()=>{ if(browse||!cur)return; const i=view.indexOf(cur); if(view[i+1])select(view[i+1]); };
+$("#deepBtn").onclick=()=>{
+  if(browse){ browse.flat=true; browse.curIdx=null; renderBrowseQueue(); return; }
+  if(cur && cur.is_dir && !BUNDLE_EXTS.includes(cur.ext)){ enterBrowse(cur); browse.flat=true; browse.curIdx=null; renderBrowseQueue(); return; }
+  toast("フォルダを選んでから押してください");
+};
+$("#renameBtn").onclick=()=>cur&&rename(cur);
+$("#trashBtn").onclick=()=>cur&&trash(cur);
+$("#undoBtn").onclick=undo;
+$("#customGo").onclick=customMove;
+$("#customPath").addEventListener("keydown",e=>{ if(e.key==="Enter") customMove(); });
+
+document.addEventListener("keydown",e=>{
+  if(/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  if(e.key==="Escape" && browse){ exitBrowse(); return; }   // ブラウズを抜ける
+  if(!cur) return;
+  // 移動(1-9) / 確認 / ゴミ箱 / 改名 / 取消 は cur（＝塊 or 中のファイル）に作用
+  if(e.key>="1"&&e.key<="9"){ const i=+e.key-1; const c=cur.candidates&&cur.candidates[i]; if(c){move(cur,c.dir);} }
+  else if(e.key==="k"||e.key==="K"){ keep(cur); }
+  else if(e.key==="d"||e.key==="D"){ trash(cur); }
+  else if(e.key==="r"||e.key==="R"){ rename(cur); }
+  else if(e.key==="u"||e.key==="U"){ undo(); }
+  else if(e.key==="s"||e.key==="S"){ if(browse)return; const i=view.indexOf(cur); if(view[i+1])select(view[i+1]); }
+  else if(e.key==="ArrowDown"){ if(browse)return; e.preventDefault(); const i=view.indexOf(cur); if(view[i+1])select(view[i+1]); }
+  else if(e.key==="ArrowUp"){ if(browse)return; e.preventDefault(); const i=view.indexOf(cur); if(view[i-1])select(view[i-1]); }
+});
+
+scan();
+</script>
+</body>
+</html>

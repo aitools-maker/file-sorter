@@ -1,0 +1,15 @@
+# 個人の操作ログ・状態（公開・共有しない）
+state.json
+moves.jsonl
+server.log
+
+# 各自の設定（自分の環境に書き換えたものはコミットしたくない場合）
+# 配布用デフォルトはコミットしてよいので、必要に応じてこの行を有効化:
+# config.json
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc

@@ -1,0 +1,53 @@
+{
+  "_README": "このファイルを編集すると、整理先フォルダや候補推定ルールを自分用に変えられます。'_' で始まるキーはコメント扱いで無視されます。意味は同梱の README.md を参照。",
+
+  "_root_dir": "整理先（移動先候補を提示する）ルートフォルダ。'~' はホーム。",
+  "root_dir": "~/Documents",
+
+  "_extra_scan_roots": "追加で『片付ける対象』にする場所。移動先候補としては出さない。[表示名, ホームからの相対 or 絶対パス]。存在する物だけ有効。",
+  "extra_scan_roots": [
+    ["@デスクトップ", "Desktop"],
+    ["@ダウンロード", "Downloads"],
+    ["@ピクチャ", "Pictures"],
+    ["@ムービー", "Movies"],
+    ["@ミュージック", "Music"]
+  ],
+
+  "_main_folders": "root_dir 直下の主要フォルダ（トップ扱い）。自分のフォルダ名に合わせて書き換える。",
+  "main_folders": ["Work", "Personal", "Media", "Archive", "_tmp"],
+
+  "_keyword_rules": "[正規表現, 推奨移動先(root_dirからの相対)]。ファイル名・現在地・拡張子に一致すると候補上位に。",
+  "keyword_rules": [
+    ["invoice|receipt|請求|領収|見積|確定申告|tax", "Work/Finance"],
+    ["resume|cv|履歴書|職務経歴", "Work"],
+    ["screenshot|スクショ|スクリーンショット|画面収録|画面キャプチャ", "Media/Screenshots"],
+    ["旅行|travel|trip|itinerary|しおり|旅程", "Personal/Travel"]
+  ],
+
+  "_ext_rules": "[拡張子グループ名, [推奨移動先...]]。グループ名: IMAGE/VIDEO/AUDIO/DOC/SHEET/SLIDE/PDF/TEXT/DTM",
+  "ext_rules": [
+    ["IMAGE", ["Media/Photos", "Media"]],
+    ["VIDEO", ["Media/Videos", "Media"]],
+    ["AUDIO", ["Media/Audio", "Media"]],
+    ["DOC", ["Work", "Personal"]],
+    ["SHEET", ["Work"]],
+    ["SLIDE", ["Work"]]
+  ],
+
+  "_kind_home_tops": "種別の『定位置トップ』。ここ以外に在ると『怪しい順』ソートで上位に来る。",
+  "kind_home_tops": {
+    "image": ["Media"],
+    "video": ["Media"],
+    "audio": ["Media"],
+    "dtm": ["Media"]
+  },
+
+  "_stable_atomic_prefixes": "何があっても1個の塊として扱う（中を個別に仕分けしない）サブツリー。root_dir からの相対パス。",
+  "stable_atomic_prefixes": [],
+
+  "_exclude_name_substr": "名前にこの文字列を含むフォルダを除外。",
+  "exclude_name_substr": ["Photo Booth"],
+
+  "_exclude_name_prefix": "名前がこの接頭辞で始まるフォルダを除外（'.' は隠しフォルダ）。",
+  "exclude_name_prefix": ["."]
+}
